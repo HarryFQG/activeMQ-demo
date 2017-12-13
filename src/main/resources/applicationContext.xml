@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:amq="http://activemq.apache.org/schema/core"
+       xmlns:jms="http://www.springframework.org/schema/jms"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+                            http://www.springframework.org/schema/beans/spring-beans.xsd
+                            http://www.springframework.org/schema/context
+                            http://www.springframework.org/schema/context/spring-context.xsd
+                            http://www.springframework.org/schema/jms
+                            http://www.springframework.org/schema/jms/spring-jms-4.3.xsd
+                            http://activemq.apache.org/schema/core
+                            http://activemq.apache.org/schema/core/activemq-core.xsd
+                            http://www.springframework.org/schema/aop
+                            http://www.springframework.org/schema/aop/spring-aop.xsd">
+
+    <!--扫描包-->
+    <context:component-scan base-package="com.start.engineer"/>
+    <aop:aspectj-autoproxy proxy-target-class="true"/>
+    <!--开启扫描注解生成bean-->
+    <context:annotation-config></context:annotation-config>
+
+
+    <!--第一步配置broker-->
+    <amq:connectionFactory brokerURL="tcp://localhost:61616" userName="admin" password="admin"
+                           id="amqConnectionFactory"/>
+    <!--第二步：将amq交给spring-->
+    <!--注意ID值，是必须的-->
+    <bean id="connectionFactory" class="org.springframework.jms.connection.CachingConnectionFactory">
+        <property name="targetConnectionFactory" ref="amqConnectionFactory"></property>
+        <property name="sessionCacheSize" value="10"></property>
+    </bean>
+
+    <!--第三步：配置两种发消息的模式（生产者）
+        1.先配点对点模式
+    -->
+
+    <bean id="queueOneTemplate" class="org.springframework.jms.core.JmsTemplate">
+        <constructor-arg ref="connectionFactory"/>
+        <!--决定是发布还是订阅，也就是生产者还是消费者
+            pubSubDomain:是不是发布订阅模型,就是是不是topic
+        -->
+        <property name="pubSubDomain" value="false"/><!--现在生产者，创建了队列-->
+        <!--非必须配置：
+                默认持久化，值为2
+            -->
+        <property name="pubSubNoLocal" value="true"/>
+        
+    </bean>
+    <!--    2.广播的形式-->
+    <bean id="topicOneTemplate" class="org.springframework.jms.core.JmsTemplate">
+        <constructor-arg ref="connectionFactory"/>
+        <!--决定是发布还是订阅，也就是生产者还是消费者
+            pubSubDomain:是不是发布订阅模型,就是是不是topic
+        -->
+        <property name="pubSubDomain" value="true"/><!--现在生产者，创建了topic-->
+    </bean>
+
+    <!--第四步：配置消费者
+            先准备消费者
+            1.配置消费点对点的消费者
+            参数：
+                prefetch：
+                    0:pull，就是消费者取broker拉消息。
+                    非0:push,就是broker推消息。具体值根据consummer消费能力决定
+                acknowledge:设置消息可靠性传输，ACK机制
+    -->
+    <bean id="queueReceiver1" class="com.start.engineer.service.QueueReceiveOne"/>
+    <jms:listener-container destination-type="queue" connection-factory="connectionFactory">
+        <!--谁监听有自己决定-->
+        <!--destination：监听队列的名字监听一个多个都可以
+            ref：
+        -->
+        <jms:listener destination="com.it.queue" ref="queueReceiver1"/>
+        <jms:listener destination="com.it.queue" ref="queueReceiveTwo"/>
+    </jms:listener-container>
+
+
+    <!--    2.配置消费广播模型的消费者
+                持久化订阅者：durableTopic
+                普通订阅者：Topic
+    -->
+    <jms:listener-container destination-type="topic" connection-factory="connectionFactory">
+        <!--谁监听有自己决定-->
+        <!--destination：监听队列的名字监听一个多个都可以
+            ref：自己定义消费者的类
+        -->
+        <jms:listener destination="com.it.topic" ref="topicReceiverOne"/>
+        <jms:listener destination="com.it.topic" ref="topicReceiverTwo"/>
+    </jms:listener-container>
+
+</beans>
